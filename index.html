@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>해양수질 실시간 관측 정보</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            padding: 20px; 
+            background-color: #f4f7f6; 
+            color: #333; 
+        }
+        h1 { color: #2c3e50; }
+        button { 
+            padding: 10px 15px; 
+            background-color: #3498db; 
+            color: white; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            font-size: 16px; 
+        }
+        button:hover { background-color: #2980b9; }
+        #status { 
+            margin-top: 15px; 
+            font-weight: bold; 
+        }
+        table { 
+            width: 100%; 
+            margin-top: 20px; 
+            border-collapse: collapse; 
+            background: white; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2); 
+        }
+        th, td { 
+            padding: 12px; 
+            border: 1px solid #ddd; 
+            text-align: center; 
+        }
+        th { 
+            background-color: #34495e; 
+            color: white; 
+        }
+    </style>
+</head>
+<body>
+    <h1>해양수질 실시간 관측 정보</h1>
+    <button onclick="fetchMarineData()">데이터 불러오기</button>
+    <div id="status">버튼을 눌러 데이터를 조회하세요.</div>
+    
+    <table id="dataTable" style="display: none;">
+        <thead>
+            <tr>
+                <th>번호</th>
+                <th>관측 정점 코드</th>
+                <th>관측 일시</th>
+                <th>수온 (℃)</th>
+            </tr>
+        </thead>
+        <tbody id="dataBody">
+        </tbody>
+    </table>
+
+    <script>
+        async function fetchMarineData() {
+            const statusDiv = document.getElementById('status');
+            const dataTable = document.getElementById('dataTable');
+            const dataBody = document.getElementById('dataBody');
+            
+            // 초기화 및 로딩 상태 표시
+            statusDiv.textContent = "데이터를 불러오는 중입니다...";
+            statusDiv.style.color = "#3498db";
+            dataTable.style.display = "none";
+            dataBody.innerHTML = "";
+
+            // API 엔드포인트 및 파라미터 조합
+            // 주의: 서비스 키에 포함된 특수문자가 변형되지 않도록 직접 URL에 붙입니다.
+            const serviceKey = "55b9d25730fce5abb690fe93acc581312c7b5faa3d9e93fb9ea21da53a2a6e69";
+            const url = `https://apis.data.go.kr/1192000/OceansWemoObvpRtmInfoService/OceansWemoObvpRtmInfo?serviceKey=${serviceKey}&pageNo=1&numOfRows=10&_type=xml`;
+
+            try {
+                // 데이터 요청
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP 에러 발생: ${response.status}`);
+                }
+                
+                // XML 텍스트로 변환 및 파싱 (Python의 ET.fromstring 역할)
+                const xmlText = await response.text();
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+                
+                // 결과 코드 확인
+                const resultCode = xmlDoc.querySelector("resultCode")?.textContent;
+                const resultMsg = xmlDoc.querySelector("resultMsg")?.textContent;
+                
+                if (resultCode === "00") {
+                    const items = xmlDoc.querySelectorAll("item");
+                    
+                    if (items.length === 0) {
+                        statusDiv.textContent = "조회된 데이터가 없습니다.";
+                        statusDiv.style.color = "#e74c3c";
+                        return;
+                    }
+
+                    // 데이터 추출 및 테이블 행 생성
+                    items.forEach((item, index) => {
+                        // 요청하신 관측 정점 코드(rtmWqWtchStaCd) 추출
+                        const staCd = item.querySelector("rtmWqWtchStaCd")?.textContent || "코드 없음";
+                        const obsTime = item.querySelector("rtmWqWtchDtlDt")?.textContent || "정보없음";
+                        const waterTemp = item.querySelector("rtmWtchWtem")?.textContent || "정보없음";
+                        
+                        const row = `<tr>
+                            <td>${index + 1}</td>
+                            <td>${staCd}</td>
+                            <td>${obsTime}</td>
+                            <td>${waterTemp}</td>
+                        </tr>`;
+                        dataBody.insertAdjacentHTML('beforeend', row);
+                    });
+
+                    // 성공 상태 처리 및 테이블 표시
+                    statusDiv.textContent = "데이터 조회 성공!";
+                    statusDiv.style.color = "#2ecc71";
+                    dataTable.style.display = "table";
+                } else {
+                    statusDiv.textContent = `API 응답 오류: ${resultMsg} (코드: ${resultCode})`;
+                    statusDiv.style.color = "#e74c3c";
+                }
+            } catch (error) {
+                statusDiv.textContent = `요청 중 오류 발생: ${error.message}`;
+                statusDiv.style.color = "#e74c3c";
+                console.error("Fetch Error:", error);
+            }
+        }
+    </script>
+</body>
+</html>
